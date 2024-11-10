@@ -1,0 +1,5 @@
+fastapi
+python-multipart
+uvicorn
+numpy==1.26.4
+style-bert-vits2
