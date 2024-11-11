@@ -21,6 +21,41 @@ bert_models.load_tokenizer(Languages.JP, "ku-nlp/deberta-v2-large-japanese-char-
 logger.info("Finish loading base model.")
 
 
+class PostProcessor:
+    async def process(audio_bytes: bytes, sample_rate: int) -> bytes:
+        raise Exception("PostProcessorBase must be implemented")
+
+
+class MP3ConvertProcessor(PostProcessor):
+    def __init__(self, bitrate: str = "64k", ffmpeg_path: str = "ffmpeg"):
+        self.bitrate = bitrate
+        self.ffmpeg_path = ffmpeg_path
+
+    async def process(self, audio_bytes: bytes, sample_rate: int, verbose: bool = False) -> bytes:
+        start_time = time()
+        # Note: This converter doesn't use sample rate because it is included in the wave header
+        ffmpeg_proc = await asyncio.create_subprocess_exec(
+            self.ffmpeg_path, "-y",
+            "-i", "-",  # Read from stdin
+            "-f", "mp3",
+            "-b:a", self.bitrate,
+            "-",        # Write to stdout
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        mp3, stderr = await ffmpeg_proc.communicate(input=audio_bytes)
+
+        if ffmpeg_proc.returncode != 0:
+            raise Exception(f"Error convert to MP3: {stderr.decode('utf-8')}")
+
+        if verbose:
+            logger.info(f"MP3 convert in {time() - start_time} sec")
+
+        return mp3
+
+
 class StyleBertVits2TTS:
     def __init__(self,
         model_dir: str = "model",
@@ -81,7 +116,7 @@ class StyleBertVits2TTS:
         unique_string = f"{text}_{speaker_id}_{style}"
         return hashlib.md5(unique_string.encode()).hexdigest()
 
-    async def tts(self, text: str, speaker_id: int, style: str, **kwargs) -> bytes:
+    async def tts(self, text: str, speaker_id: int, style: str, post_processor: PostProcessor = None, **kwargs) -> bytes:
         cache_key = self.generate_cache_key(text, speaker_id, style)
 
         # Check cache
@@ -117,8 +152,13 @@ class StyleBertVits2TTS:
                 wf.writeframes(audio)
             buffer.seek(0)
 
-            # Store in cache
             audio_data = buffer.read()
+
+            # Post processing
+            if post_processor:
+                audio_data = await post_processor.process(audio_data, rate, self.verbose)
+
+            # Store in cache
             self.cache[cache_key] = audio_data
             return audio_data
 
