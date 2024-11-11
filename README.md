@@ -62,6 +62,12 @@ Set the following command as the Container Start Command in your Pod console, th
     SBV2_API_LITE_VERBOSE
     ```
 
+    If you want to use compressed audio, add the variable with the value `ffmpeg-static/ffmpeg`:
+
+    ```
+    SBV2_API_LITE_FFMPEG_PATH
+    ```
+
 1. Click **Connect to HTTP Service [Port 5000]**
 
     Click **Connect to HTTP Service [Port 5000]** button and head over to /docs to see the OpenAPI interface.

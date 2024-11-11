@@ -15,15 +15,16 @@ from style_bert_vits2.constants import (
 )
 from fastapi import APIRouter, Query, File, UploadFile
 from fastapi.responses import Response, JSONResponse
-from .tts import StyleBertVits2TTS
+from .tts import StyleBertVits2TTS, MP3ConvertProcessor
 
 
 # Get logger
 logger = logging.getLogger(__name__)
 
 
-def get_api_router(sbv2tts: StyleBertVits2TTS):
+def get_api_router(sbv2tts: StyleBertVits2TTS, mp3bitrate: str = "64k", ffmpeg_path: str = "ffmpeg"):
     router = APIRouter()
+    mp3_converter_processor = MP3ConvertProcessor(mp3bitrate, ffmpeg_path)
 
     @router.get("/voice", tags=["Text-to-Speech"])
     async def get_voice(
@@ -40,10 +41,18 @@ def get_api_router(sbv2tts: StyleBertVits2TTS):
         assist_text_weight: float = Query(DEFAULT_ASSIST_TEXT_WEIGHT, alias="assist_text_weight"),
         style: str = Query(DEFAULT_STYLE, alias="style"),
         style_weight: float = Query(DEFAULT_STYLE_WEIGHT, alias="style_weight"),
-        reference_audio_path: Optional[str] = Query(None, alias="reference_audio_path")
+        reference_audio_path: Optional[str] = Query(None, alias="reference_audio_path"),
+        x_audio_format: str = Query("wave", alias="x_audio_format")
     ):
         try:
             if sbv2tts.tts_model:
+                if x_audio_format == "mp3" and mp3_converter_processor is not None:
+                    media_type = "audio/mpeg"
+                    post_processor = mp3_converter_processor
+                else:
+                    media_type = "audio/wav"
+                    post_processor = None
+
                 audio_data = await sbv2tts.tts(
                     text=text,
                     speaker_id=speaker_id,
@@ -59,8 +68,9 @@ def get_api_router(sbv2tts: StyleBertVits2TTS):
                     assist_text_weight=assist_text_weight,
                     style_weight=style_weight,
                     reference_audio_path=reference_audio_path,
+                    post_processor=post_processor
                 )
-                return Response(content=audio_data, media_type="audio/wav")
+                return Response(content=audio_data, media_type=media_type)
 
             else:
                 return JSONResponse(content={"error": "Text-to-speech model is not loaded."}, status_code=500)
