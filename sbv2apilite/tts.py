@@ -112,12 +112,17 @@ class StyleBertVits2TTS:
             self.tts_model = None
             return False
 
-    def generate_cache_key(self, text: str, speaker_id: int, style: str) -> str:
+    def generate_cache_key(self, text: str, speaker_id: int, style: str, additional_str: str = None) -> str:
         unique_string = f"{text}_{speaker_id}_{style}"
+        if additional_str:
+            unique_string += f"_{additional_str}"
         return hashlib.md5(unique_string.encode()).hexdigest()
 
     async def tts(self, text: str, speaker_id: int, style: str, post_processor: PostProcessor = None, **kwargs) -> bytes:
-        cache_key = self.generate_cache_key(text, speaker_id, style)
+        cache_key = self.generate_cache_key(
+            text, speaker_id, style,
+            post_processor.__class__.__name__ if post_processor else None
+        )
 
         # Check cache
         if cache_key in self.cache:
