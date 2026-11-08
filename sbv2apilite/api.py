@@ -118,6 +118,12 @@ def get_api_router(sbv2tts: StyleBertVits2TTS, mp3bitrate: str = "64k", ffmpeg_p
 
         return JSONResponse(content={"result": "success" if is_loaded else "fail"})
 
+    @router.delete("/cache", tags=["Cache"], summary="Clear the current model's audio cache")
+    def delete_cache():
+        """Clear source WAV and converted audio from the active cache backend."""
+        sbv2tts.clear_cache()
+        return JSONResponse(content={"result": "success"})
+
     @router.post("/config/verbose", tags=["Configuration"])
     async def post_config_verbose(
         verbose: bool
