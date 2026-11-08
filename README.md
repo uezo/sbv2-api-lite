@@ -33,6 +33,26 @@ Now go to http://127.0.0.1:5000/docs . Upload yoru model file and enjoy high qua
 
 
 
+## Language models
+
+Loading a voice model also prepares its BERT model and tokenizer resources:
+
+- JP-Extra models prepare Japanese resources only.
+- Normal models prepare Japanese, English, and Chinese resources. Their
+  configuration does not identify a single language to use.
+
+Missing resources are downloaded automatically from Hugging Face. Downloaded
+files are reused from its cache on later starts, and loaded resources are shared
+between voice models within the same process. These assets use the Hugging Face
+cache, separately from the generated-audio cache below.
+
+The first load can take longer and requires internet access to download missing
+files. Normal models also require memory for the additional language resources.
+If preparing a required resource fails, the voice model load fails. Importing
+the module or starting without a voice model does not download these resources.
+No changes to `run.py` are needed to enable this behavior.
+
+
 ## Audio cache
 
 The cache backend is selected at startup. By default, generated audio is cached
