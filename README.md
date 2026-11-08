@@ -84,9 +84,20 @@ output. The built-in MP3 processor includes its bitrate and ffmpeg path.
 WAV-to-WAV processing is supported: the source and converted `.wav` files have
 different keys and are both preserved.
 
-`clear_cache()` clears only the currently loaded model's cache. Older models'
-file caches remain on disk until explicitly removed. Neither backend has an
-expiration time or size limit.
+To clear the current model's source WAV and converted audio caches:
+
+```sh
+curl -X DELETE http://127.0.0.1:5000/cache
+```
+
+The endpoint returns HTTP 200 with `{"result":"success"}`, including when the
+cache is already empty. It supports both memory and file backends. With a router
+prefix such as `/tsumugi`, use `/tsumugi/cache` to clear that model's cache.
+
+Python callers can use `clear_cache()` for the same operation. Older models'
+file caches remain on disk until explicitly removed. Memory caches are cleared
+only in the process handling the request. Neither backend has an expiration time
+or size limit.
 
 
 ## 📦　Run on RunPod
