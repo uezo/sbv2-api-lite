@@ -25,12 +25,33 @@ _BERT_MODEL_NAMES = {
 _BERT_LOAD_LOCK = Lock()
 
 
+def _prepare_english_nltk_data():
+    import nltk
+
+    resources = (
+        ("cmudict", "corpora/cmudict.zip"),
+        # g2p_en checks for this legacy archive even with current NLTK versions.
+        ("averaged_perceptron_tagger", "taggers/averaged_perceptron_tagger.zip"),
+        ("averaged_perceptron_tagger_eng", "taggers/averaged_perceptron_tagger_eng/"),
+    )
+    for name, path in resources:
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            logger.info("Downloading English NLTK resource: %s", name)
+            if not nltk.download(name, quiet=True, raise_on_error=True):
+                raise RuntimeError(f"Failed to download NLTK resource: {name}")
+            nltk.data.find(path)
+
+
 def _prepare_bert_models(version: str):
     # Normal models support all three languages; JP-Extra is Japanese-only.
     languages = (Languages.JP,) if version.endswith("JP-Extra") else tuple(_BERT_MODEL_NAMES)
     # The library caches these resources globally, across TTS instances.
     with _BERT_LOAD_LOCK:
         for language in languages:
+            if language == Languages.EN:
+                _prepare_english_nltk_data()
             model_name = _BERT_MODEL_NAMES[language]
             logger.info("Preparing %s BERT model and tokenizer from %s", language, model_name)
             # Explicit repository IDs let Hugging Face reuse cached files or
