@@ -4,6 +4,7 @@ import io
 import json
 import logging
 from pathlib import Path
+from threading import Lock
 from time import time
 import wave
 from style_bert_vits2.nlp import bert_models
@@ -16,11 +17,27 @@ from .cache import FileCache
 logger = logging.getLogger(__name__)
 
 
-# Import base model
-logger.info("Start loading base model. This may take several minutes...")
-bert_models.load_model(Languages.JP, "ku-nlp/deberta-v2-large-japanese-char-wwm")
-bert_models.load_tokenizer(Languages.JP, "ku-nlp/deberta-v2-large-japanese-char-wwm")
-logger.info("Finish loading base model.")
+_BERT_MODEL_NAMES = {
+    Languages.JP: "ku-nlp/deberta-v2-large-japanese-char-wwm",
+    Languages.EN: "microsoft/deberta-v3-large",
+    Languages.ZH: "hfl/chinese-roberta-wwm-ext-large",
+}
+_BERT_LOAD_LOCK = Lock()
+
+
+def _prepare_bert_models(version: str):
+    # Normal models support all three languages; JP-Extra is Japanese-only.
+    languages = (Languages.JP,) if version.endswith("JP-Extra") else tuple(_BERT_MODEL_NAMES)
+    # The library caches these resources globally, across TTS instances.
+    with _BERT_LOAD_LOCK:
+        for language in languages:
+            model_name = _BERT_MODEL_NAMES[language]
+            logger.info("Preparing %s BERT model and tokenizer from %s", language, model_name)
+            # Explicit repository IDs let Hugging Face reuse cached files or
+            # download missing assets instead of requiring the default local path.
+            bert_models.load_model(language, model_name)
+            bert_models.load_tokenizer(language, model_name)
+            logger.info("%s BERT model and tokenizer are ready", language)
 
 
 class PostProcessor:
@@ -123,6 +140,7 @@ class StyleBertVits2TTS:
                 style_vec_path=str(self.style_file),
                 device="cuda" if self.use_gpu else "cpu"
             )
+            _prepare_bert_models(tts_model.hyper_parameters.version)
 
             if self.cache_backend == "file":
                 cache = FileCache(self.cache_dir / self._model_cache_id())

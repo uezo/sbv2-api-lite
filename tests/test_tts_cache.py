@@ -319,7 +319,8 @@ class ModelCacheTests(unittest.IsolatedAsyncioTestCase):
 
     def make_model(self, **kwargs):
         model = SimpleNamespace(
-            infer=Mock(return_value=(44100, bytes([len(self.models) + 1, 0]) * 32))
+            infer=Mock(return_value=(44100, bytes([len(self.models) + 1, 0]) * 32)),
+            hyper_parameters=SimpleNamespace(version="2.7.0-JP-Extra"),
         )
         self.models.append(model)
         return model
