@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import json
 import logging
 from pathlib import Path
 from time import time
@@ -112,16 +113,23 @@ class StyleBertVits2TTS:
             self.tts_model = None
             return False
 
-    def generate_cache_key(self, text: str, speaker_id: int, style: str, additional_str: str = None) -> str:
-        unique_string = f"{text}_{speaker_id}_{style}"
-        if additional_str:
-            unique_string += f"_{additional_str}"
-        return hashlib.md5(unique_string.encode()).hexdigest()
+    def generate_cache_key(self, text: str, speaker_id: int, style: str, additional_str: str = None, **kwargs) -> str:
+        parameters = {
+            "text": text,
+            "speaker_id": speaker_id,
+            "style": style,
+            "post_processor": additional_str,
+            **kwargs,
+        }
+        # Keep the key stable regardless of parameter order.
+        serialized = json.dumps(parameters, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.md5(serialized.encode("utf-8")).hexdigest()
 
     async def tts(self, text: str, speaker_id: int, style: str, post_processor: PostProcessor = None, **kwargs) -> bytes:
         cache_key = self.generate_cache_key(
             text, speaker_id, style,
-            post_processor.__class__.__name__ if post_processor else None
+            post_processor.__class__.__name__ if post_processor else None,
+            **kwargs
         )
 
         # Check cache
