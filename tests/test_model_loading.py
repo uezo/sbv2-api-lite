@@ -27,8 +27,13 @@ class LanguageModelLoadingTests(unittest.TestCase):
         (self.model_dir / "style_vectors.npy").write_bytes(b"style vectors")
         self.write_config("2.7.0-JP-Extra")
         self.bert = SimpleNamespace(load_model=Mock(), load_tokenizer=Mock())
+        self.prepare_english = Mock()
         self.factory = Mock(side_effect=self.make_model)
-        for name, value in (("bert_models", self.bert), ("TTSModel", self.factory)):
+        for name, value in (
+            ("bert_models", self.bert),
+            ("TTSModel", self.factory),
+            ("_prepare_english_nltk_data", self.prepare_english),
+        ):
             patcher = patch.object(tts_module, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -56,6 +61,7 @@ class LanguageModelLoadingTests(unittest.TestCase):
         tts = self.create_tts()
 
         self.assertIsNotNone(tts.tts_model)
+        self.prepare_english.assert_not_called()
         self.bert.load_model.assert_called_once_with(
             Languages.JP, "ku-nlp/deberta-v2-large-japanese-char-wwm"
         )
@@ -69,6 +75,7 @@ class LanguageModelLoadingTests(unittest.TestCase):
         tts = self.create_tts()
 
         self.assertIsNotNone(tts.tts_model)
+        self.prepare_english.assert_called_once_with()
         self.assert_normal_model_resources_prepared()
 
     def test_switching_to_normal_model_prepares_english_and_chinese(self):
@@ -115,6 +122,17 @@ class LanguageModelLoadingTests(unittest.TestCase):
         self.factory.assert_not_called()
         self.bert.load_model.assert_not_called()
         self.bert.load_tokenizer.assert_not_called()
+        self.prepare_english.assert_not_called()
+
+    def test_english_data_failure_fails_model_load(self):
+        self.write_config("2.0")
+        self.prepare_english.side_effect = OSError("NLTK download failed")
+
+        with self.assertLogs(tts_module.logger, level="ERROR"):
+            tts = self.create_tts()
+
+        self.assertIsNone(tts.tts_model)
+        self.assertEqual(len(tts.cache), 0)
 
     def test_import_does_not_prepare_language_resources(self):
         with patch.dict("sys.modules", {
@@ -129,6 +147,65 @@ class LanguageModelLoadingTests(unittest.TestCase):
 
         self.bert.load_model.assert_not_called()
         self.bert.load_tokenizer.assert_not_called()
+
+
+class EnglishNLTKDataTests(unittest.TestCase):
+    def setUp(self):
+        self.resources = {
+            "cmudict": "corpora/cmudict.zip",
+            "averaged_perceptron_tagger": "taggers/averaged_perceptron_tagger.zip",
+            "averaged_perceptron_tagger_eng": "taggers/averaged_perceptron_tagger_eng/",
+        }
+        self.available = set()
+        self.nltk = SimpleNamespace(
+            data=SimpleNamespace(find=Mock(side_effect=self.find)),
+            download=Mock(side_effect=self.download),
+        )
+        patcher = patch.dict("sys.modules", {"nltk": self.nltk})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def find(self, path):
+        if path not in self.available:
+            raise LookupError(path)
+        return path
+
+    def download(self, name, **kwargs):
+        self.available.add(self.resources[name])
+        return True
+
+    def test_missing_data_is_downloaded_and_reused(self):
+        tts_module._prepare_english_nltk_data()
+        self.assertEqual(set(self.resources.values()), self.available)
+        self.assertEqual(self.nltk.download.call_count, 3)
+
+        self.nltk.download.reset_mock()
+        tts_module._prepare_english_nltk_data()
+        self.nltk.download.assert_not_called()
+
+    def test_current_english_tagger_is_prepared_when_legacy_tagger_exists(self):
+        self.available.update(self.resources.values())
+        self.available.remove(self.resources["averaged_perceptron_tagger_eng"])
+
+        tts_module._prepare_english_nltk_data()
+
+        self.nltk.download.assert_called_once_with(
+            "averaged_perceptron_tagger_eng", quiet=True, raise_on_error=True
+        )
+
+    def test_download_failure_is_reported(self):
+        self.nltk.download.side_effect = None
+        self.nltk.download.return_value = False
+
+        with self.assertRaisesRegex(RuntimeError, "cmudict"):
+            tts_module._prepare_english_nltk_data()
+
+    def test_downloaded_data_must_be_available_before_success(self):
+        self.nltk.download.side_effect = None
+        self.nltk.download.return_value = True
+
+        with self.assertRaises(LookupError):
+            tts_module._prepare_english_nltk_data()
 
 
 if __name__ == "__main__":

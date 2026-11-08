@@ -41,6 +41,17 @@ Loading a voice model also prepares its BERT model and tokenizer resources:
 - Normal models prepare Japanese, English, and Chinese resources. Their
   configuration does not identify a single language to use.
 
+The English tokenizer requires the `sentencepiece` Python package, included in
+`requirements.txt`. After updating an existing installation, run
+`python -m pip install -r requirements.txt` and restart the API server so newly
+installed dependencies are available.
+
+English pronunciation also requires NLTK's CMU dictionary and part-of-speech
+tagger data, including `averaged_perceptron_tagger_eng` for current NLTK versions.
+Missing data is downloaded when a normal voice model is loaded, using NLTK's
+data directories (`NLTK_DATA` can specify a custom location). JP-Extra models do
+not prepare these English resources.
+
 Missing resources are downloaded automatically from Hugging Face. Downloaded
 files are reused from its cache on later starts, and loaded resources are shared
 between voice models within the same process. These assets use the Hugging Face
