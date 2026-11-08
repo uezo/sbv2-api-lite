@@ -33,6 +33,62 @@ Now go to http://127.0.0.1:5000/docs . Upload yoru model file and enjoy high qua
 
 
 
+## Audio cache
+
+The cache backend is selected at startup. By default, generated audio is cached
+in memory and discarded when the process exits.
+
+| Environment variable | Default | Description |
+| --- | --- | --- |
+| `SBV2_API_LITE_CACHE_BACKEND` | `memory` | `memory` or `file` |
+| `SBV2_API_LITE_CACHE_DIR` | `.cache/tts` | Root directory for the file cache |
+
+To persist generated audio on the filesystem:
+
+```sh
+SBV2_API_LITE_CACHE_BACKEND=file \
+SBV2_API_LITE_CACHE_DIR=/path/to/cache \
+uvicorn run:app --host 0.0.0.0 --port 5000
+```
+
+Python callers can pass `cache_backend="file"` and `cache_dir="/path/to/cache"`
+to `StyleBertVits2TTS`.
+
+Both backends cache audio in two stages:
+
+- The **source WAV** is keyed by all synthesis parameters, including `language`.
+  Without a post processor, this is the only stored entry.
+- A **converted result** is keyed by the source key and the post processor's
+  identity, settings, and output extension. A hit returns it directly. Otherwise,
+  the source WAV is reused for conversion, so changing the output format or
+  bitrate does not repeat inference.
+
+Files retain their audio extensions and can be opened directly:
+
+```text
+<cache_dir>/<model_hash>/source_<synthesis_hash>.wav
+<cache_dir>/<model_hash>/converted_<conversion_hash>.mp3
+```
+
+The model hash is calculated from the contents of the model, configuration, and
+style-vector files once when the model is loaded. Changing any of these files
+selects a different cache directory, even if the filename stays the same. Loading
+the same model again, including after a restart, reuses its saved audio. Memory
+caches are reset on every model load.
+
+Custom `PostProcessor` subclasses implement
+`async process(self, audio_bytes, sample_rate, verbose=False) -> bytes` and declare
+`file_extension`, such as `"wav"`, `"ogg"`, or `"flac"` (default: `"bin"` when
+unspecified). Override `cache_key()` to include all settings that affect the
+output. The built-in MP3 processor includes its bitrate and ffmpeg path.
+WAV-to-WAV processing is supported: the source and converted `.wav` files have
+different keys and are both preserved.
+
+`clear_cache()` clears only the currently loaded model's cache. Older models'
+file caches remain on disk until explicitly removed. Neither backend has an
+expiration time or size limit.
+
+
 ## 📦　Run on RunPod
 
 Set the following command as the Container Start Command in your Pod console, then start the Pod to execute the process. Once complete, stop the Pod in the same order.
